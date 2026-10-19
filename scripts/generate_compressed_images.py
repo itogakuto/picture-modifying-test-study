@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import time
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -25,12 +27,33 @@ class CompressionCondition:
 
 
 CONDITIONS = (
-    CompressionCondition("vga_q95", 640, 480, 95),
     CompressionCondition("qvga_q75", 320, 240, 75),
     CompressionCondition("qvga_q50", 320, 240, 50),
-    CompressionCondition("qqvga_q75", 160, 120, 75),
-    CompressionCondition("qqvga_q50", 160, 120, 50),
+    CompressionCondition("qvga_q30", 320, 240, 30),
+    CompressionCondition("qvga_q15", 320, 240, 15),
+    CompressionCondition("qvga_q5", 320, 240, 5),
 )
+
+
+def parse_run_id(value: str) -> str:
+    if re.fullmatch(r"\d{8}_v\d{2,}", value) is None:
+        raise argparse.ArgumentTypeError("実験IDは YYYYMMDD_vNN 形式で指定してください。")
+    return value
+
+
+def next_run_id(results_dir: Path, output_dir: Path) -> str:
+    date_prefix = date.today().strftime("%Y%m%d")
+    existing_ids = {
+        path.stem.removeprefix("compression_manifest_")
+        for path in results_dir.glob(f"compression_manifest_{date_prefix}_v*.csv")
+    }
+    existing_ids.update(
+        path.name for path in output_dir.glob(f"{date_prefix}_v*") if path.is_dir()
+    )
+    version = 1
+    while f"{date_prefix}_v{version:02d}" in existing_ids:
+        version += 1
+    return f"{date_prefix}_v{version:02d}"
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,7 +61,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, default=work_dir / "data" / "raw")
     parser.add_argument("--output-dir", type=Path, default=work_dir / "data" / "processed")
-    parser.add_argument("--manifest", type=Path, default=work_dir / "results" / "compression_manifest.csv")
+    parser.add_argument("--manifest", type=Path, help="manifestの保存先（省略時は実験ID付きで保存）。")
+    parser.add_argument("--run-id", type=parse_run_id, help="実験ID（例: 20261019_v01）。省略時は自動採番。")
     parser.add_argument(
         "--background",
         default="0,0,0",
@@ -85,7 +109,12 @@ def main() -> None:
     background = parse_color(args.background)
     input_dir: Path = args.input_dir
     output_dir: Path = args.output_dir
-    manifest_path: Path = args.manifest
+    results_dir = Path(__file__).resolve().parents[1] / "results"
+    run_id = args.run_id or next_run_id(results_dir, output_dir)
+    manifest_path = args.manifest or results_dir / f"compression_manifest_{run_id}.csv"
+    versioned_output_dir = output_dir / run_id
+    if manifest_path.exists() or versioned_output_dir.exists():
+        raise SystemExit(f"実験ID {run_id} の出力が既に存在します。別の --run-id を指定してください。")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     start = time.perf_counter()
@@ -119,7 +148,7 @@ def main() -> None:
                 transformed, geometry = fit_with_padding(
                     image, (condition.width, condition.height), background
                 )
-                destination_path = output_dir / condition.label / class_name / f"{source_path.stem}.jpg"
+                destination_path = versioned_output_dir / condition.label / class_name / f"{source_path.stem}.jpg"
                 destination_path.parent.mkdir(parents=True, exist_ok=True)
                 # optimize を無効にして、実機との比較で再現性を優先する。
                 transformed.save(
@@ -152,7 +181,7 @@ def main() -> None:
                 })
 
     fieldnames = [
-        "class_name", "source_path", "output_path", "condition", "target_width", "target_height",
+        "run_id", "class_name", "source_path", "output_path", "condition", "target_width", "target_height",
         "jpeg_quality", "padding_method", "background_rgb", "source_width", "source_height",
         "resized_width", "resized_height", "scale", "padding_left", "padding_top", "padding_right",
         "padding_bottom", "source_size_bytes", "output_size_bytes", "compression_ratio", "status", "error",
@@ -160,10 +189,12 @@ def main() -> None:
     with manifest_path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows({"run_id": run_id, **row} for row in rows)
 
     success_count = sum(row.get("status") == "ok" for row in rows)
     print(f"変換済み画像: {success_count} 枚")
+    print(f"実験ID: {run_id}")
+    print(f"画像出力先: {versioned_output_dir}")
     print(f"変換記録: {manifest_path}")
 
     end = time.perf_counter()

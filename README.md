@@ -74,7 +74,13 @@ python3 scripts/generate_compressed_images.py
 python3 scripts/generate_compressed_images.py --background 128,128,128
 ```
 
-> 同一条件で再実行すると、既存の圧縮画像と `compression_manifest.csv` は上書きされます。
+実行ごとに `YYYYMMDD_vNN` 形式の実験IDを自動採番します。圧縮画像は `data/processed/<実験ID>/`、manifestは `results/compression_manifest_<実験ID>.csv` に保存され、過去の実験結果は上書きされません。実験IDを指定する場合は、例えば次のようにします。
+
+```bash
+python3 scripts/generate_compressed_images.py --run-id 20261019_v01
+```
+
+すでに使われている実験IDを指定すると、上書き防止のためエラーになります。
 
 ## 各ファイルの説明
 
@@ -93,7 +99,7 @@ python3 scripts/generate_compressed_images.py --background 128,128,128
 
 | 出力ファイル | 内容 |
 | --- | --- |
-| `results/compression_manifest.csv` | 元画像と圧縮画像の対応、変換条件、元・変換後のサイズ、圧縮率、縮小率、余白のピクセル数、変換成否 |
+| `results/compression_manifest_<実験ID>.csv` | 実験ID、元画像と圧縮画像の対応、変換条件、元・変換後のサイズ、圧縮率、縮小率、余白のピクセル数、変換成否 |
 
 ## ESP32-S3-CAMとの対応
 
