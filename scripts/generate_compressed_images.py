@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -87,6 +88,8 @@ def main() -> None:
     manifest_path: Path = args.manifest
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
+    start = time.perf_counter()
+
     rows: list[dict[str, object]] = []
     for class_name in CLASSES:
         class_dir = input_dir / class_name
@@ -124,7 +127,7 @@ def main() -> None:
                     format="JPEG",
                     quality=condition.quality,
                     subsampling=2,  # 4:2:0
-                    optimize=False,
+                    optimize=True,
                     progressive=False,
                 )
                 output_size = destination_path.stat().st_size
@@ -162,6 +165,9 @@ def main() -> None:
     success_count = sum(row.get("status") == "ok" for row in rows)
     print(f"変換済み画像: {success_count} 枚")
     print(f"変換記録: {manifest_path}")
+
+    end = time.perf_counter()
+    print(f"実行時間: {end - start}msec")
 
 
 if __name__ == "__main__":
