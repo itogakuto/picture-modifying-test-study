@@ -25,6 +25,7 @@ class CompressionCondition:
     height: int
     quality: int
     color_mode: str = "rgb"
+    tone_levels: int | None = None
 
 
 CONDITIONS = (
@@ -33,10 +34,10 @@ CONDITIONS = (
     CompressionCondition("qvga_q30", 320, 240, 30),
     CompressionCondition("qvga_q15", 320, 240, 15),
     CompressionCondition("qvga_q5", 320, 240, 5),
-    CompressionCondition("qvga_gray_q50", 320, 240, 50, "grayscale"),
-    CompressionCondition("qvga_gray_q30", 320, 240, 30, "grayscale"),
-    CompressionCondition("qqvga_gray_q50", 160, 120, 50, "grayscale"),
-    CompressionCondition("qqvga_gray_q30", 160, 120, 30, "grayscale"),
+    CompressionCondition("qvga_gray_q30", 320, 240, 30, "grayscale", 256),
+    CompressionCondition("qvga_gray_6bit_q30", 320, 240, 30, "grayscale", 64),
+    CompressionCondition("qvga_gray_5bit_q30", 320, 240, 30, "grayscale", 32),
+    CompressionCondition("qvga_gray_4bit_q30", 320, 240, 30, "grayscale", 16),
 )
 
 
@@ -113,6 +114,21 @@ def fit_with_padding(
     }
 
 
+def quantize_grayscale(image: Image.Image, levels: int) -> Image.Image:
+    """グレースケール画像を指定した階調数へ量子化する。"""
+    if not 2 <= levels <= 256:
+        raise ValueError("階調数は2〜256で指定してください。")
+    if image.mode != "L":
+        raise ValueError("量子化の入力画像はグレースケール（L）である必要があります。")
+    if levels == 256:
+        return image
+
+    maximum_level = levels - 1
+    return image.point(
+        lambda value: round(value * maximum_level / 255) * 255 // maximum_level
+    )
+
+
 def main() -> None:
     args = parse_args()
     background = parse_color(args.background)
@@ -156,11 +172,16 @@ def main() -> None:
             for condition in CONDITIONS:
                 if condition.color_mode == "grayscale":
                     working_image = image.convert("L")
+                    working_image = quantize_grayscale(
+                        working_image, condition.tone_levels or 256
+                    )
                     # RGBの余白色と同じ知覚輝度になる値を使う。
                     working_background: int | tuple[int, int, int] = round(
                         0.299 * background[0] + 0.587 * background[1] + 0.114 * background[2]
                     )
-                    output_color_mode = "grayscale"
+                    output_color_mode = (
+                        "grayscale_6bit" if condition.tone_levels == 64 else "grayscale"
+                    )
                 else:
                     working_image = image
                     working_background = background
@@ -190,6 +211,7 @@ def main() -> None:
                     "target_height": condition.height,
                     "jpeg_quality": condition.quality,
                     "color_mode": output_color_mode,
+                    "tone_levels": condition.tone_levels or "",
                     "padding_method": "fit_with_black_bars",
                     "background_rgb": ",".join(str(value) for value in background),
                     "source_width": source_width,
@@ -204,7 +226,7 @@ def main() -> None:
 
     fieldnames = [
         "run_id", "class_name", "source_path", "output_path", "condition", "target_width", "target_height",
-        "jpeg_quality", "color_mode", "padding_method", "background_rgb", "source_width", "source_height",
+        "jpeg_quality", "color_mode", "tone_levels", "padding_method", "background_rgb", "source_width", "source_height",
         "resized_width", "resized_height", "scale", "padding_left", "padding_top", "padding_right",
         "padding_bottom", "source_size_bytes", "output_size_bytes", "compression_ratio", "status", "error",
     ]
