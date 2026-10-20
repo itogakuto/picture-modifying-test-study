@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""boar / deer 画像を4:3のJPEGへ変換し、変換情報をCSVへ記録する。"""
+"""boar / deer 画像をカラー・モノクロの4:3 JPEGへ変換し、変換情報をCSVへ記録する。"""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ class CompressionCondition:
     width: int
     height: int
     quality: int
+    color_mode: str = "rgb"
 
 
 CONDITIONS = (
@@ -32,6 +33,10 @@ CONDITIONS = (
     CompressionCondition("qvga_q30", 320, 240, 30),
     CompressionCondition("qvga_q15", 320, 240, 15),
     CompressionCondition("qvga_q5", 320, 240, 5),
+    CompressionCondition("qvga_gray_q50", 320, 240, 50, "grayscale"),
+    CompressionCondition("qvga_gray_q30", 320, 240, 30, "grayscale"),
+    CompressionCondition("qqvga_gray_q50", 160, 120, 50, "grayscale"),
+    CompressionCondition("qqvga_gray_q30", 160, 120, 30, "grayscale"),
 )
 
 
@@ -81,7 +86,11 @@ def parse_color(value: str) -> tuple[int, int, int]:
     return rgb
 
 
-def fit_with_padding(image: Image.Image, target_size: tuple[int, int], background: tuple[int, int, int]) -> tuple[Image.Image, dict[str, int | float]]:
+def fit_with_padding(
+    image: Image.Image,
+    target_size: tuple[int, int],
+    background: int | tuple[int, int, int],
+) -> tuple[Image.Image, dict[str, int | float]]:
     target_width, target_height = target_size
     source_width, source_height = image.size
     scale = min(target_width / source_width, target_height / source_height)
@@ -145,20 +154,32 @@ def main() -> None:
                 continue
 
             for condition in CONDITIONS:
+                if condition.color_mode == "grayscale":
+                    working_image = image.convert("L")
+                    # RGBの余白色と同じ知覚輝度になる値を使う。
+                    working_background: int | tuple[int, int, int] = round(
+                        0.299 * background[0] + 0.587 * background[1] + 0.114 * background[2]
+                    )
+                    output_color_mode = "grayscale"
+                else:
+                    working_image = image
+                    working_background = background
+                    output_color_mode = "rgb"
                 transformed, geometry = fit_with_padding(
-                    image, (condition.width, condition.height), background
+                    working_image, (condition.width, condition.height), working_background
                 )
                 destination_path = versioned_output_dir / condition.label / class_name / f"{source_path.stem}.jpg"
                 destination_path.parent.mkdir(parents=True, exist_ok=True)
                 # optimize を無効にして、実機との比較で再現性を優先する。
-                transformed.save(
-                    destination_path,
-                    format="JPEG",
-                    quality=condition.quality,
-                    subsampling=2,  # 4:2:0
-                    optimize=True,
-                    progressive=False,
-                )
+                save_options: dict[str, object] = {
+                    "format": "JPEG",
+                    "quality": condition.quality,
+                    "optimize": True,
+                    "progressive": False,
+                }
+                if condition.color_mode == "rgb":
+                    save_options["subsampling"] = 2  # 4:2:0
+                transformed.save(destination_path, **save_options)
                 output_size = destination_path.stat().st_size
                 rows.append({
                     "class_name": class_name,
@@ -168,6 +189,7 @@ def main() -> None:
                     "target_width": condition.width,
                     "target_height": condition.height,
                     "jpeg_quality": condition.quality,
+                    "color_mode": output_color_mode,
                     "padding_method": "fit_with_black_bars",
                     "background_rgb": ",".join(str(value) for value in background),
                     "source_width": source_width,
@@ -182,7 +204,7 @@ def main() -> None:
 
     fieldnames = [
         "run_id", "class_name", "source_path", "output_path", "condition", "target_width", "target_height",
-        "jpeg_quality", "padding_method", "background_rgb", "source_width", "source_height",
+        "jpeg_quality", "color_mode", "padding_method", "background_rgb", "source_width", "source_height",
         "resized_width", "resized_height", "scale", "padding_left", "padding_top", "padding_right",
         "padding_bottom", "source_size_bytes", "output_size_bytes", "compression_ratio", "status", "error",
     ]

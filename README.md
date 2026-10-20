@@ -24,11 +24,15 @@ work/
 │   │   ├── boar/
 │   │   └── deer/
 │   └── processed/               # 条件別に生成するJPEG画像
-│       ├── vga_q95/
 │       ├── qvga_q75/
 │       ├── qvga_q50/
-│       ├── qqvga_q75/
-│       └── qqvga_q50/
+│       ├── qvga_q30/
+│       ├── qvga_q15/
+│       ├── qvga_q5/
+│       ├── qvga_gray_q50/
+│       ├── qvga_gray_q30/
+│       ├── qqvga_gray_q50/
+│       └── qqvga_gray_q30/
 ├── results/                     # CSVの集計・変換記録
 ├── scripts/                     # 実行用Pythonスクリプト
 └── README.md
@@ -56,17 +60,21 @@ python3 scripts/summarize_dataset.py
 python3 scripts/generate_compressed_images.py
 ```
 
-各元画像から、次の5条件のJPEG画像を作成します。
+各元画像から、次の9条件のJPEG画像を作成します。
 
-| 保存フォルダ | 解像度 | JPEG品質（Pillow） |
-| --- | ---: | ---: |
-| `vga_q95` | 640×480 | 95 |
-| `qvga_q75` | 320×240 | 75 |
-| `qvga_q50` | 320×240 | 50 |
-| `qqvga_q75` | 160×120 | 75 |
-| `qqvga_q50` | 160×120 | 50 |
+| 保存フォルダ | 色 | 解像度 | JPEG品質（Pillow） |
+| --- | --- | ---: | ---: |
+| `qvga_q75` | カラー | 320×240 | 75 |
+| `qvga_q50` | カラー | 320×240 | 50 |
+| `qvga_q30` | カラー | 320×240 | 30 |
+| `qvga_q15` | カラー | 320×240 | 15 |
+| `qvga_q5` | カラー | 320×240 | 5 |
+| `qvga_gray_q50` | モノクロ | 320×240 | 50 |
+| `qvga_gray_q30` | モノクロ | 320×240 | 30 |
+| `qqvga_gray_q50` | モノクロ | 160×120 | 50 |
+| `qqvga_gray_q30` | モノクロ | 160×120 | 30 |
 
-画像の縦横比は保ち、4:3の出力サイズに収まらない部分は黒い余白で補います。そのため、画像中の動物を中央で切り抜くことはありません。JPEGは4:2:0サブサンプリングで保存します。
+画像の縦横比は保ち、4:3の出力サイズに収まらない部分は黒い余白で補います。そのため、画像中の動物を中央で切り抜くことはありません。カラーJPEGは4:2:0サブサンプリング、モノクロJPEGは輝度1チャンネルで保存します。
 
 背景色を変えたい場合は、RGB値を指定します。例えば灰色の場合は次のとおりです。
 
@@ -95,11 +103,11 @@ python3 scripts/generate_compressed_images.py --run-id 20261019_v01
 
 ### `scripts/generate_compressed_images.py`
 
-5種類の解像度・JPEG品質で派生画像を作るスクリプトです。出力先は `data/processed/<条件名>/<クラス名>/` です。
+カラー5条件とモノクロ4条件の派生画像を作るスクリプトです。出力先は `data/processed/<実験ID>/<条件名>/<クラス名>/` です。
 
 | 出力ファイル | 内容 |
 | --- | --- |
-| `results/compression_manifest_<実験ID>.csv` | 実験ID、元画像と圧縮画像の対応、変換条件、元・変換後のサイズ、圧縮率、縮小率、余白のピクセル数、変換成否 |
+| `results/compression_manifest_<実験ID>.csv` | 実験ID、元画像と圧縮画像の対応、変換条件、カラー／モノクロ、元・変換後のサイズ、圧縮率、縮小率、余白のピクセル数、変換成否 |
 
 ## ESP32-S3-CAMとの対応
 
